@@ -31,7 +31,7 @@ def main():
     with open(sys.argv[1], "rb") as f:
         filedata = f.read()
 
-    symbols = bytes_to_symbols(filedata)
+    symbols = bytes_to_symbols(test_phrase)
 
     signal = np.concatenate([symbol_signals[i].copy() for i in symbols])
 
@@ -63,7 +63,7 @@ if __name__ == '__main__':
 
     sample_rate = 44100
 
-    symbol_length_samples = 100
+    symbol_length_samples = 200
     cycles_per_symbol = 1
 
     main()
