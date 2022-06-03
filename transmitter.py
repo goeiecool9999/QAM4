@@ -23,7 +23,7 @@ def main():
     phases = [0, 0.5, 1, 1.5]
     symbol_signals = []
     for i in phases:
-        symbol_signals.append((np.cos(2 * np.pi * sample_space + i * np.pi) * 0.2 * 2147483647).astype('int32'))
+        symbol_signals.append((np.cos(2 * np.pi * sample_space + i * np.pi) * 0.6 * 2147483647).astype('int32'))
 
     symbol_signals = [np.hstack((i.reshape(len(i), 1), np.zeros((len(sample_space), 1), dtype='int32'))) for i in
                       symbol_signals]
@@ -35,10 +35,11 @@ def main():
 
     signal = np.concatenate([symbol_signals[i].copy() for i in symbols])
 
-    name = 'Loopback: PCM (hw:2,0)'
-    test = sd.query_devices(device=name, kind='output')
-    stream = sd.OutputStream(samplerate=48000, device=name, channels=2, dtype='int32')
-    # stream = sd.OutputStream(samplerate=48000, device=sd.default.device, channels=2, dtype='int32')
+    # name = 'Loopback: PCM (hw:2,0)'
+    name = 'HDMI: 3 (hw:0'
+    # test = sd.query_devices(device=name, kind='output')
+    stream = sd.OutputStream(samplerate=sample_rate, device=name, channels=2, dtype='int32')
+    # stream = sd.OutputStream(samplerate=sample_rate, device=sd.default.device, channels=2, dtype='int32')
 
     stream.start()
     # send preamble
@@ -62,7 +63,7 @@ if __name__ == '__main__':
 
     sample_rate = 48000
 
-    symbol_length_samples = 50
-    cycles_per_symbol = 1
+    symbol_length_samples = 100
+    cycles_per_symbol = 2
 
     main()
