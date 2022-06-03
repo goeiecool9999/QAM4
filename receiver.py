@@ -6,6 +6,7 @@ import sounddevice as sd
 import numpy as np
 import matplotlib.pyplot as plt
 
+
 def fft_symbols(signal):
     # split signal into sections of symbols
     signal_sections = np.split(signal, len(signal) // symbol_length_samples)
@@ -48,9 +49,8 @@ def determine_snr(stream):
     noise_measurement = stream_read_left_float32(stream, sample_rate * 4)
     noise_measurement = noise_measurement[sample_rate * 2:]
 
-
-    plt.plot(noise_measurement)
-    plt.show()
+    # plt.plot(noise_measurement)
+    # plt.show()
     # return loudest value
     return np.amax(np.abs(noise_measurement))
 
@@ -68,7 +68,7 @@ def symbols_to_bytes(symbols):
 def main():
     name = 'Loopback: PCM (hw:2,1)'
 
-    stream = sd.InputStream(device=sd.default.device, samplerate=sample_rate, channels=2, dtype='int32')
+    stream = sd.InputStream(device=name, samplerate=sample_rate, channels=2, dtype='int32')
     stream.start()
 
     print('discovering noise floor')
@@ -108,18 +108,26 @@ def main():
         stream.stop()
         stream.close()
 
-        angles = fft_symbols(data // symbol_length_samples * symbol_length_samples)
+        angles = fft_symbols(data[:len(data) // symbol_length_samples * symbol_length_samples])
         change = angles[1:] != angles[:-1]
         changes = change.nonzero()[0]
-        change_lens = changes[1:] - np.concatenate(([0], changes[:-2]))
+        change_lens = changes[1:] - np.concatenate(([0], changes[1:-1]))
 
         start_sample = 0
-        skip_candidates = (change_lens > 7).nonzero()[0]
-        for i, v in enumerate(skip_candidates):
-            if i != v:
-                if i - 1 > 0:
-                    start_sample = (changes[i - 1] - 2) * symbol_length_samples
-                    break
+        skip_candidates = (change_lens > 15).nonzero()[0]
+
+        # check lapses
+        for i in range(1, len(skip_candidates)):
+            # lapse in skip candidates indicate data
+            if skip_candidates[i] - 1 != skip_candidates[i - 1]:
+                start_sample = (changes[skip_candidates[i - 1]] - 2) * symbol_length_samples
+                break
+        # no lapse found, pick last skip
+        if start_sample == 0 and len(skip_candidates):
+            start_sample = (changes[skip_candidates[-1]] - 2) * symbol_length_samples
+
+        if start_sample < 0:
+            start_sample = 0
 
         data = data[start_sample:]
 
@@ -132,8 +140,12 @@ def main():
 
         plt.rcParams['figure.dpi'] = 300
 
-        plt.plot(data[preamble_start - symbol_length_samples * 2:preamble_start + symbol_length_samples * 15])
-        plt.axvline(symbol_length_samples * 2)
+        plt.plot(data[max(preamble_start - symbol_length_samples * 2, 0):preamble_start + symbol_length_samples * 15])
+        if preamble_start - symbol_length_samples * 2 < 0:
+            plt.axvline(symbol_length_samples * 2 - (preamble_start - symbol_length_samples * 2))
+        else:
+            plt.axvline(symbol_length_samples * 2)
+
         plt.show()
 
         data_start = preamble_start + preamble_num_samples
@@ -147,13 +159,13 @@ def main():
 if __name__ == '__main__':
     symbol_length_samples = 100
 
-    sample_rate = 48000
+    sample_rate = 44100
 
     preamble = [0, 2, 1, 3, 0, 0, 1, 1, 2, 2, 3, 3]
     preamble_num_samples = symbol_length_samples * len(preamble)
 
     # 10% over noise
-    snr_desired = 10
+    snr_desired = 200
     snr_factor = 1. + (snr_desired / 100.)
 
     main()

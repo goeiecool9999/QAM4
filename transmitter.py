@@ -35,15 +35,15 @@ def main():
 
     signal = np.concatenate([symbol_signals[i].copy() for i in symbols])
 
-    # name = 'Loopback: PCM (hw:2,0)'
-    name = 'HDMI: 3 (hw:0'
+    name = 'Loopback: PCM (hw:2,0)'
+    # name = 'HDMI: 3 (hw:0'
     # test = sd.query_devices(device=name, kind='output')
     stream = sd.OutputStream(samplerate=sample_rate, device=name, channels=2, dtype='int32')
     # stream = sd.OutputStream(samplerate=sample_rate, device=sd.default.device, channels=2, dtype='int32')
 
     stream.start()
     # send preamble
-    for i in [0]*20 + preamble:
+    for i in [0]*50 + preamble:
         stream.write(symbol_signals[i])
 
 
@@ -61,9 +61,9 @@ if __name__ == '__main__':
 
     preamble = [0, 2, 1, 3, 0, 0, 1, 1, 2, 2, 3, 3]
 
-    sample_rate = 48000
+    sample_rate = 44100
 
     symbol_length_samples = 100
-    cycles_per_symbol = 2
+    cycles_per_symbol = 1
 
     main()
