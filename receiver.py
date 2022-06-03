@@ -51,6 +51,16 @@ def determine_snr(stream):
     return np.amax(np.abs(noise_measurement))
 
 
+def symbols_to_bytes(symbols):
+    out = np.empty(len(symbols) // 4, dtype='byte')
+    for i in range(len(out)):
+        out[i] = symbols[i * 4 + 0] << 6
+        out[i] |= symbols[i * 4 + 1] << 4
+        out[i] |= symbols[i * 4 + 2] << 2
+        out[i] |= symbols[i * 4 + 3] << 0
+    return out.tobytes()
+
+
 def main():
     name = 'Loopback: PCM (hw:2,1)'
 
@@ -89,36 +99,48 @@ def main():
         candidate = stream_read_left_float32(stream, silence_detector_chunk_size)
 
     print("sound stopped!")
-    # signal_sections = np.split(data, len(data) // symbol_length_samples // 10)
-    # for i in signal_sections:
-    # plt.plot(i)
-    # plt.show()
 
-    # slide across capture until preamble
-    preamble_found = False
+    stream.stop()
+    stream.close()
+
+    angles = fft_symbols(data // symbol_length_samples * symbol_length_samples)
+    change = angles[1:] != angles[:-1]
+    changes = change.nonzero()[0]
+    change_lens = changes[1:] - np.concatenate(([0], changes[:-2]))
+
+    start_sample = 0
+    skip_candidates = (change_lens > 7).nonzero()[0]
+    for i, v in enumerate(skip_candidates):
+        if i != v:
+            if i - 1 > 0:
+                start_sample = (changes[i - 1] - 2) * symbol_length_samples
+                break
+
+    data = data[start_sample:]
 
     preamble_start = 0
-    # slide across until halfway, end of transform reached end of window
     for i in range(len(data)):
-        angles = fft_symbols(data[i:i + (len(data) - i) // symbol_length_samples * symbol_length_samples])
-        print(angles[0:30])
+        angles = fft_symbols(data[i:i + preamble_num_samples * 2])
         if ''.join(str(s) for s in preamble) in ''.join(str(a) for a in angles[:len(preamble)]):
-            print ("Holy shit!")
             preamble_start = i
             break
 
     plt.rcParams['figure.dpi'] = 300
 
-    plt.plot(data[preamble_start-symbol_length_samples*2:preamble_start + symbol_length_samples*15])
-    plt.axvline(symbol_length_samples*2)
+    plt.plot(data[preamble_start - symbol_length_samples * 2:preamble_start + symbol_length_samples * 15])
+    plt.axvline(symbol_length_samples * 2)
     plt.show()
 
-    stream.stop()
-    stream.close()
+    data_start = preamble_start + preamble_num_samples
+
+    symbols = fft_symbols(
+        data[data_start: data_start + (len(data) - data_start) // symbol_length_samples * symbol_length_samples])
+
+    print(symbols_to_bytes(symbols).decode('ascii'))
 
 
 if __name__ == '__main__':
-    symbol_length_samples = 250
+    symbol_length_samples = 50
     cycles_per_symbol = 1
 
     preamble = [0, 2, 1, 3, 0, 0, 1, 1, 2, 2, 3, 3]

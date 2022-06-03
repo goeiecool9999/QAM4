@@ -31,7 +31,7 @@ def main():
     with open(sys.argv[1], "rb") as f:
         filedata = f.read()
 
-    symbols = bytes_to_symbols(test_phrase)
+    symbols = bytes_to_symbols(filedata)
 
     signal = np.concatenate([symbol_signals[i].copy() for i in symbols])
 
@@ -45,11 +45,12 @@ def main():
     for i in [0]*20 + preamble:
         stream.write(symbol_signals[i])
 
-    sleep(1)
 
     # send data
-    # for i in symbols:
-    # stream.write(symbol_signals[i])
+    for i in symbols:
+        stream.write(symbol_signals[i])
+
+    sleep(1)
     stream.stop()
     stream.close()
 
@@ -59,7 +60,7 @@ if __name__ == '__main__':
 
     preamble = [0, 2, 1, 3, 0, 0, 1, 1, 2, 2, 3, 3]
 
-    symbol_length_samples = 250
+    symbol_length_samples = 50
     cycles_per_symbol = 1
 
     main()
