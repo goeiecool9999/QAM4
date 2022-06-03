@@ -45,8 +45,9 @@ def stream_read_left_float32(stream, amount):
 
 
 def determine_snr(stream):
-    # record two seconds for noise
-    noise_measurement = stream_read_left_float32(stream, 48000 * 2)
+    # record four seconds for noise and drop first two.
+    noise_measurement = stream_read_left_float32(stream, sample_rate * 4)
+    noise_measurement = noise_measurement[sample_rate * 2:]
     # return loudest value
     return np.amax(np.abs(noise_measurement))
 
@@ -64,7 +65,7 @@ def symbols_to_bytes(symbols):
 def main():
     name = 'Loopback: PCM (hw:2,1)'
 
-    stream = sd.InputStream(device=name, samplerate=48000, channels=2, dtype='int32')
+    stream = sd.InputStream(device=name, samplerate=sample_rate, channels=2, dtype='int32')
     stream.start()
 
     print('discovering noise floor')
@@ -72,11 +73,11 @@ def main():
     print(f'noise floor at {noise_floor}')
 
     # twenty seconds of buffer
-    data = np.empty(48000 * 20, dtype='float32')
+    data = np.empty(sample_rate * 20, dtype='float32')
     record_index = 0
 
     # record half seconds at a time waiting for broken silence
-    silence_detector_chunk_size = 48000 // 10
+    silence_detector_chunk_size = sample_rate // 10
     candidate = np.zeros(silence_detector_chunk_size)
 
     print("waiting for sound")
@@ -136,12 +137,14 @@ def main():
     symbols = fft_symbols(
         data[data_start: data_start + (len(data) - data_start) // symbol_length_samples * symbol_length_samples])
 
-    print(symbols_to_bytes(symbols).decode('ascii'))
+    print(symbols_to_bytes(symbols).decode(encoding='ascii', errors='replace'))
 
 
 if __name__ == '__main__':
     symbol_length_samples = 50
     cycles_per_symbol = 1
+
+    sample_rate = 48000
 
     preamble = [0, 2, 1, 3, 0, 0, 1, 1, 2, 2, 3, 3]
     preamble_num_samples = symbol_length_samples * len(preamble)

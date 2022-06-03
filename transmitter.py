@@ -60,6 +60,8 @@ if __name__ == '__main__':
 
     preamble = [0, 2, 1, 3, 0, 0, 1, 1, 2, 2, 3, 3]
 
+    sample_rate = 48000
+
     symbol_length_samples = 50
     cycles_per_symbol = 1
 
