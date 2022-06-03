@@ -66,7 +66,7 @@ def main():
     record_index = 0
 
     # record half seconds at a time waiting for broken silence
-    silence_detector_chunk_size = 48000 // 2
+    silence_detector_chunk_size = 48000 // 10
     candidate = np.zeros(silence_detector_chunk_size)
 
     print("waiting for sound")
@@ -89,19 +89,29 @@ def main():
         candidate = stream_read_left_float32(stream, silence_detector_chunk_size)
 
     print("sound stopped!")
-    signal_sections = np.split(data, len(data) // symbol_length_samples // 10)
-    for i in signal_sections:
-        plt.plot(i)
-        plt.show()
+    # signal_sections = np.split(data, len(data) // symbol_length_samples // 10)
+    # for i in signal_sections:
+    # plt.plot(i)
+    # plt.show()
 
     # slide across capture until preamble
     preamble_found = False
-    while not preamble_found:
-        # slide across until halfway, end of transform reached end of window
-        for i in range(len(data)):
-            angles = fft_symbols(data[i:])
-            if preamble in angles:
-                print("We found the preamble!")
+
+    preamble_start = 0
+    # slide across until halfway, end of transform reached end of window
+    for i in range(len(data)):
+        angles = fft_symbols(data[i:i + (len(data) - i) // symbol_length_samples * symbol_length_samples])
+        print(angles[0:30])
+        if ''.join(str(s) for s in preamble) in ''.join(str(a) for a in angles[:len(preamble)]):
+            print ("Holy shit!")
+            preamble_start = i
+            break
+
+    plt.rcParams['figure.dpi'] = 300
+
+    plt.plot(data[preamble_start-symbol_length_samples*2:preamble_start + symbol_length_samples*15])
+    plt.axvline(symbol_length_samples*2)
+    plt.show()
 
     stream.stop()
     stream.close()
