@@ -1,11 +1,8 @@
 import sys
 from time import sleep
 
-from scipy.fft import fft
-
 import sounddevice as sd
 import numpy as np
-import matplotlib.pyplot as plt
 
 
 def bytes_to_symbols(data):
@@ -42,7 +39,7 @@ def main():
 
     name = 'Loopback: PCM (hw:2,0)'
     name = 'HDMI: 3 (hw:0'
-    # test = sd.query_devices(device=name, kind='output')
+
     # stream = sd.OutputStream(samplerate=sample_rate, device=name, channels=2, dtype='int32')
     stream = sd.OutputStream(samplerate=sample_rate, device=sd.default.device, channels=2, dtype='int32')
 
@@ -67,7 +64,6 @@ if __name__ == '__main__':
     # Some global parameters
     test_phrase = b'this is a test of QAM. I really really hope it works out well!'
 
-    # preamble = [0, 2, 1, 3, 0, 0, 1, 1, 2, 2, 3, 3]
     preamble = [3, 2, 1, 0, 3, 1, 2, 0, 3, 3, 0, 0, 1, 1, 3, 3]
 
     sample_rate = 192000
