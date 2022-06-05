@@ -1,6 +1,7 @@
 import sys
 
 import scipy.fft
+from imath import clamp
 from scipy.fft import fft
 
 import sounddevice as sd
@@ -8,30 +9,39 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
-def fft_symbols(signal, get_err=False, suppress_graph=False, preamb_align_graph=False):
-    # split signal into sections of symbols
-    signal_sections = np.split(signal, len(signal) // symbol_length_samples)
+def fft_symbols_error_feedback(signal):
+    symbol_chunk_size = 900
 
-    if preamb_align_graph:
-        for i in signal_sections:
-            plt.plot(i)
-            plt.title("preamb alignment symbol")
-            plt.show()
+    symbols = []
+    chunk_start = 0
+    chunk_end = symbol_chunk_size * symbol_length_samples
+
+    while chunk_end < len(signal):
+        angles, error = fft_symbols(signal[chunk_start: chunk_end], True)
+        symbols.append(angles)
+
+        correction_factor = int(np.sum(error) / 15)
+
+        chunk_start = chunk_end + correction_factor
+        chunk_end = chunk_start + symbol_chunk_size * symbol_length_samples
+
+    return np.concatenate(symbols)
+
+
+def fft_symbols(signal, get_err=False):
+    # split signal into sections of symbols
+    signal_sections = np.array_split(signal, len(signal) // symbol_length_samples)
 
     # perform transformations
-    transformations = fft(signal_sections, norm='ortho')
+    transformations = [fft(x, norm='ortho') for x in signal_sections]
 
     # take target frequency
-    values = transformations[:, cycles_per_symbol]
-
-    non_round = np.mod((np.arctan2(values.imag, values.real) + np.pi) / np.pi * 2 - 2, 4)
-    round = np.mod(np.round((np.arctan2(values.imag, values.real) + np.pi) / np.pi * 2 - 2), 4).astype('byte')
+    values = np.array([x[cycles_per_symbol] for x in transformations])
 
     out = np.mod(np.round((np.arctan2(values.imag, values.real) + np.pi) / np.pi * 2 - 2), 4).astype('byte')
 
-    if not suppress_graph:
-        plt.scatter(values.real, values.imag)
-        plt.show()
+    non_round = np.mod((np.arctan2(values.imag, values.real) + np.pi) / np.pi * 2 - 2, 4)
+    round = np.mod(np.round((np.arctan2(values.imag, values.real) + np.pi) / np.pi * 2 - 2), 4).astype('byte')
 
     error = out - non_round
     error = np.where(error < -3, 4 + error, error)
@@ -126,7 +136,7 @@ def main():
         data = -data
         stop_time = record_index * silence_detector_chunk_size
 
-        angles = fft_symbols(data[:stop_time // symbol_length_samples * symbol_length_samples], False, True)
+        angles = fft_symbols(data[:stop_time // symbol_length_samples * symbol_length_samples])
         change = angles[1:] != angles[:-1]
         changes = change.nonzero()[0]
         change_lens = changes - np.concatenate(([0], changes[0:-1]))
@@ -156,12 +166,12 @@ def main():
         preamble_start = 0
         missing_preamble = True
         for i in range(preamble_num_samples * 6):
-            if i == 0:
-                plt.plot(data[i: i + preamble_num_samples])
-                plt.title('searching preamble in this initial window')
-                plt.show()
+            # if i == 0:
+            # plt.plot(data[i: i + preamble_num_samples])
+            # plt.title('searching preamble in this initial window')
+            # plt.show()
 
-            angles, error = fft_symbols(data[i:i + preamble_num_samples * 2], True, True)
+            angles, error = fft_symbols(data[i:i + preamble_num_samples * 2], True)
             if ''.join(str(s) for s in preamble) in ''.join(str(a) for a in angles[:len(preamble)]):
                 preamble_start = i
                 missing_preamble = False
@@ -171,15 +181,14 @@ def main():
             print('failed to find preamble in sound')
             continue
 
-
-        plt.figure(figsize=(20, 8))
-        plt.plot(data[max(preamble_start - symbol_length_samples * 2, 0):preamble_start + symbol_length_samples * 2])
-        plt.title('first detection preamble')
-        if preamble_start - symbol_length_samples * 2 < 0:
-            plt.axvline(preamble_start)
-        else:
-            plt.axvline(symbol_length_samples*2)
-        plt.show()
+        # plt.figure(figsize=(20, 8))
+        # plt.plot(data[max(preamble_start - symbol_length_samples * 2, 0):preamble_start + symbol_length_samples * 2])
+        # plt.title('first detection preamble')
+        # if preamble_start - symbol_length_samples * 2 < 0:
+        # plt.axvline(preamble_start)
+        # else:
+        # plt.axvline(symbol_length_samples * 2)
+        # plt.show()
 
         error = np.sum(np.abs(error))
         last_error = error
@@ -188,36 +197,36 @@ def main():
             last_error = error
             preamble_error_search_start = preamble_start + extra_offset
             search_angles, error = fft_symbols(
-                data[preamble_error_search_start:preamble_error_search_start + preamble_num_samples * 2], True, True)
+                data[preamble_error_search_start:preamble_error_search_start + preamble_num_samples * 2], True)
             error = np.sum(np.abs(error))
             extra_offset += 1
 
         # Add the offset excluding the one that increased error
         preamble_start += extra_offset - 1
 
-        plt.figure(figsize=(20, 8))
-        plt.plot(data[max(preamble_start - symbol_length_samples * 2, 0):preamble_start + symbol_length_samples * 2])
-        plt.title('correction preamble')
-        if preamble_start - symbol_length_samples * 2 < 0:
-            plt.axvline(preamble_start)
-        else:
-            plt.axvline(symbol_length_samples * 2)
-
-        plt.show()
+        # plt.figure(figsize=(20, 8))
+        # plt.plot(data[max(preamble_start - symbol_length_samples * 2, 0):preamble_start + symbol_length_samples * 2])
+        # plt.title('correction preamble')
+        # if preamble_start - symbol_length_samples * 2 < 0:
+        #     plt.axvline(preamble_start)
+        # else:
+        #     plt.axvline(symbol_length_samples * 2)
+        #
+        # plt.show()
 
         data_start = preamble_start + preamble_num_samples
 
-        symbols, error = fft_symbols(
-            data[data_start: data_start + (stop_time - data_start) // symbol_length_samples * symbol_length_samples],
-            True, False)
+        symbols = fft_symbols_error_feedback(
+            data[data_start: data_start + (stop_time - data_start) // symbol_length_samples * symbol_length_samples]
+        )
 
         # plt.figure(figsize=(100, 5))
         # plt.plot(data[data_start:  data_start + (stop_time - data_start) // symbol_length_samples * symbol_length_samples], linewidth=0.5)
         # plt.title('data signal')
         # plt.show()
-        plt.plot(error)
-        plt.title('error over time')
-        plt.show()
+        # plt.plot(error)
+        # plt.title('error over time')
+        # plt.show()
 
         print(symbols_to_bytes(symbols).decode(encoding='ascii', errors='replace'))
 

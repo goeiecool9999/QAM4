@@ -36,7 +36,7 @@ def main():
     signal = np.concatenate([symbol_signals[i].copy() for i in symbols])
 
     name = 'Loopback: PCM (hw:2,0)'
-    # name = 'HDMI: 3 (hw:0'
+    name = 'HDMI: 3 (hw:0'
     # test = sd.query_devices(device=name, kind='output')
     stream = sd.OutputStream(samplerate=sample_rate, device=name, channels=2, dtype='int32')
     # stream = sd.OutputStream(samplerate=sample_rate, device=sd.default.device, channels=2, dtype='int32')
