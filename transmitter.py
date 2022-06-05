@@ -63,7 +63,7 @@ if __name__ == '__main__':
 
     sample_rate = 44100
 
-    symbol_length_samples = 100
+    symbol_length_samples = 15
     cycles_per_symbol = 1
 
     main()

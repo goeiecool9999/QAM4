@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 
 
 def fft_symbols_error_feedback(signal):
-    symbol_chunk_size = 900
+    symbol_chunk_size = 150
 
     symbols = []
     chunk_start = 0
@@ -20,9 +20,11 @@ def fft_symbols_error_feedback(signal):
         angles, error = fft_symbols(signal[chunk_start: chunk_end], True)
         symbols.append(angles)
 
-        correction_factor = int(np.sum(error) / 15)
+        # 0.5 error for a symbol means 90 degrees phase shift
+        # 90 degrees shift = 0.25*symbol_length_samples
+        correction = int(np.sum(error) / symbol_chunk_size * 0.25 * symbol_length_samples)
 
-        chunk_start = chunk_end + correction_factor
+        chunk_start = chunk_end + correction
         chunk_end = chunk_start + symbol_chunk_size * symbol_length_samples
 
     return np.concatenate(symbols)
@@ -96,8 +98,8 @@ def symbols_to_bytes(symbols):
 def main():
     name = 'Loopback: PCM (hw:2,1)'
 
-    # stream = sd.InputStream(device=sd.default.device, samplerate=sample_rate, channels=2, dtype='int32')
-    stream = sd.InputStream(device=name, samplerate=sample_rate, channels=2, dtype='int32')
+    stream = sd.InputStream(device=sd.default.device, samplerate=sample_rate, channels=2, dtype='int32')
+    # stream = sd.InputStream(device=name, samplerate=sample_rate, channels=2, dtype='int32')
     stream.start()
 
     print('discovering noise floor')
@@ -239,7 +241,7 @@ def main():
 if __name__ == '__main__':
     plt.rcParams['figure.dpi'] = 300
 
-    symbol_length_samples = 100
+    symbol_length_samples = 15
     cycles_per_symbol = 1
 
     sample_rate = 44100
