@@ -8,39 +8,30 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
-def fft_symbols(signal, get_err=False):
+def fft_symbols(signal, get_err=False, suppress_graph=False, preamb_align_graph=False):
     # split signal into sections of symbols
     signal_sections = np.split(signal, len(signal) // symbol_length_samples)
+
+    if preamb_align_graph:
+        for i in signal_sections:
+            plt.plot(i)
+            plt.title("preamb alignment symbol")
+            plt.show()
+
     # perform transformations
     transformations = fft(signal_sections, norm='ortho')
 
-    # take positive frequencies
-    transformations = transformations[:, 1:len(transformations[0]) // 2]
-
-    # find the loudest frequency indices
-    loud_indices = np.argmax(np.abs(transformations), axis=1)
-
-    # select those values from transformations
-    values = np.take_along_axis(transformations, loud_indices.reshape(len(transformations), 1), axis=1).flatten()
+    # take target frequency
+    values = transformations[:, cycles_per_symbol]
 
     non_round = np.mod((np.arctan2(values.imag, values.real) + np.pi) / np.pi * 2 - 2, 4)
     round = np.mod(np.round((np.arctan2(values.imag, values.real) + np.pi) / np.pi * 2 - 2), 4).astype('byte')
 
     out = np.mod(np.round((np.arctan2(values.imag, values.real) + np.pi) / np.pi * 2 - 2), 4).astype('byte')
 
-
-    N = len(signal) // (len(signal) // symbol_length_samples)
-
-    scale = scipy.fft.fftfreq(N, 1/sample_rate)[1:N//2]
-
-    try:
-        plt.plot(scale, np.abs(transformations[3]))
+    if not suppress_graph:
+        plt.scatter(values.real, values.imag)
         plt.show()
-    except Exception as e:
-        print (e)
-
-    print (f'f Most common loud frequency: {scale[np.bincount(loud_indices).argmax()]}')
-
 
     error = out - non_round
     error = np.where(error < -3, 4 + error, error)
@@ -132,12 +123,13 @@ def main():
             rec_chunk = stream_read_left_float32(stream, silence_detector_chunk_size)
 
         print("sound stopped!")
+        data = -data
         stop_time = record_index * silence_detector_chunk_size
 
-        angles = fft_symbols(data[:len(data) // symbol_length_samples * symbol_length_samples])
+        angles = fft_symbols(data[:stop_time // symbol_length_samples * symbol_length_samples], False, True)
         change = angles[1:] != angles[:-1]
         changes = change.nonzero()[0]
-        change_lens = changes[1:] - np.concatenate(([0], changes[1:-1]))
+        change_lens = changes - np.concatenate(([0], changes[0:-1]))
 
         start_sample = 0
         skip_candidates = (change_lens > 15).nonzero()[0]
@@ -149,11 +141,11 @@ def main():
         for i in range(1, len(skip_candidates)):
             # lapse in skip candidates indicate data
             if skip_candidates[i] - 1 != skip_candidates[i - 1]:
-                start_sample = (changes[skip_candidates[i - 1]] - 2) * symbol_length_samples
+                start_sample = (changes[skip_candidates[i - 1]]) * symbol_length_samples
                 break
         # no lapse found, pick last skip
         if start_sample == 0 and len(skip_candidates):
-            start_sample = (changes[skip_candidates[-1]+1] - 2) * symbol_length_samples
+            start_sample = (changes[skip_candidates[-1]]) * symbol_length_samples
 
         if start_sample < 0:
             start_sample = 0
@@ -162,16 +154,32 @@ def main():
         stop_time -= start_sample
 
         preamble_start = 0
-        for i in range(len(data)):
+        missing_preamble = True
+        for i in range(preamble_num_samples * 6):
             if i == 0:
-                plt.plot( data[i:i + preamble_num_samples * 2] )
+                plt.plot(data[i: i + preamble_num_samples])
                 plt.title('searching preamble in this initial window')
                 plt.show()
 
-            angles, error = fft_symbols(data[i:i + preamble_num_samples * 2], True)
+            angles, error = fft_symbols(data[i:i + preamble_num_samples * 2], True, True)
             if ''.join(str(s) for s in preamble) in ''.join(str(a) for a in angles[:len(preamble)]):
                 preamble_start = i
+                missing_preamble = False
                 break
+
+        if missing_preamble:
+            print('failed to find preamble in sound')
+            continue
+
+
+        plt.figure(figsize=(20, 8))
+        plt.plot(data[max(preamble_start - symbol_length_samples * 2, 0):preamble_start + symbol_length_samples * 2])
+        plt.title('first detection preamble')
+        if preamble_start - symbol_length_samples * 2 < 0:
+            plt.axvline(preamble_start)
+        else:
+            plt.axvline(symbol_length_samples*2)
+        plt.show()
 
         error = np.sum(np.abs(error))
         last_error = error
@@ -180,18 +188,18 @@ def main():
             last_error = error
             preamble_error_search_start = preamble_start + extra_offset
             search_angles, error = fft_symbols(
-                data[preamble_error_search_start:preamble_error_search_start + preamble_num_samples * 2], True)
+                data[preamble_error_search_start:preamble_error_search_start + preamble_num_samples * 2], True, True)
             error = np.sum(np.abs(error))
             extra_offset += 1
 
         # Add the offset excluding the one that increased error
         preamble_start += extra_offset - 1
 
-
-        plt.plot(data[max(preamble_start - symbol_length_samples * 2, 0):preamble_start + symbol_length_samples * 15])
-        plt.title('found preamble')
+        plt.figure(figsize=(20, 8))
+        plt.plot(data[max(preamble_start - symbol_length_samples * 2, 0):preamble_start + symbol_length_samples * 2])
+        plt.title('correction preamble')
         if preamble_start - symbol_length_samples * 2 < 0:
-            plt.axvline(symbol_length_samples * 2 - (preamble_start - symbol_length_samples * 2))
+            plt.axvline(preamble_start)
         else:
             plt.axvline(symbol_length_samples * 2)
 
@@ -201,12 +209,12 @@ def main():
 
         symbols, error = fft_symbols(
             data[data_start: data_start + (stop_time - data_start) // symbol_length_samples * symbol_length_samples],
-            True)
+            True, False)
 
-        plt.figure(figsize=(100, 5))
-        plt.plot(data[data_start:  data_start + (stop_time - data_start) // symbol_length_samples * symbol_length_samples], linewidth=0.5)
-        plt.title('data signal')
-        plt.show()
+        # plt.figure(figsize=(100, 5))
+        # plt.plot(data[data_start:  data_start + (stop_time - data_start) // symbol_length_samples * symbol_length_samples], linewidth=0.5)
+        # plt.title('data signal')
+        # plt.show()
         plt.plot(error)
         plt.title('error over time')
         plt.show()
@@ -223,10 +231,11 @@ if __name__ == '__main__':
     plt.rcParams['figure.dpi'] = 300
 
     symbol_length_samples = 100
+    cycles_per_symbol = 1
 
     sample_rate = 44100
 
-    preamble = [0, 2, 1, 3, 0, 0, 1, 1, 2, 2, 3, 3]
+    preamble = [3, 2, 1, 0, 3, 1, 2, 0, 3, 3, 0, 0, 1, 1, 3, 3]
     preamble_num_samples = symbol_length_samples * len(preamble)
 
     # 10% over noise

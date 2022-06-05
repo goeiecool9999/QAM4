@@ -31,7 +31,7 @@ def main():
     with open(sys.argv[1], "rb") as f:
         filedata = f.read()
 
-    symbols = bytes_to_symbols(test_phrase)
+    symbols = bytes_to_symbols(filedata)
 
     signal = np.concatenate([symbol_signals[i].copy() for i in symbols])
 
@@ -43,9 +43,8 @@ def main():
 
     stream.start()
     # send preamble
-    for i in [0]*50 + preamble:
+    for i in [0] * 50 + preamble:
         stream.write(symbol_signals[i])
-
 
     # send data
     for i in symbols:
@@ -59,11 +58,12 @@ def main():
 if __name__ == '__main__':
     test_phrase = b'this is a test of QAM. I really really hope it works out well!'
 
-    preamble = [0, 2, 1, 3, 0, 0, 1, 1, 2, 2, 3, 3]
+    # preamble = [0, 2, 1, 3, 0, 0, 1, 1, 2, 2, 3, 3]
+    preamble = [3, 2, 1, 0, 3, 1, 2, 0, 3, 3, 0, 0, 1, 1, 3, 3]
 
     sample_rate = 44100
 
-    symbol_length_samples = 200
+    symbol_length_samples = 100
     cycles_per_symbol = 1
 
     main()
