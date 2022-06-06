@@ -17,7 +17,7 @@ def bytes_to_symbols(data):
 
 def main():
     # input for sine
-    sample_space = np.linspace(0, cycles_per_symbol, symbol_length_samples)
+    sample_space = np.linspace(0, cycles_per_symbol, symbol_length_samples, endpoint=False)
     # shifts for each symbol
     phases = [0, 0.5, 1, 1.5]
     # sample date for each shifted wave
