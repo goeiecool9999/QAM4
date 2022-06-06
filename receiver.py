@@ -39,13 +39,13 @@ def fft_symbols(signal, get_err=False):
     :return: if get_err = True returns tuple of symbols and corresponding error values, otherwise returns symbols
     """
     # split signal into sections of symbols
-    signal_sections = np.array_split(signal, len(signal) // symbol_length_samples)
+    signal_sections = np.split(signal, len(signal) // symbol_length_samples)
 
     # perform transformations
-    transformations = [fft(x, norm='ortho') for x in signal_sections]
+    transformations = fft(signal_sections, norm='ortho')
 
     # take target frequency
-    values = np.array([x[cycles_per_symbol] for x in transformations])
+    values = transformations[:,cycles_per_symbol]
 
     # rounded angle calculations becoming symbol values
     out = np.mod(np.round((np.arctan2(values.imag, values.real) + np.pi) / np.pi * 2 - 2), 4).astype('byte')
