@@ -28,8 +28,7 @@ def main():
     # Base phase of each quadrant
     quadrant_base_phases = [0.25, 1.75, 0.75, 1.25]
     # phase offset for each position in quadrant
-    atan_1_2 = atan(1 / 2) / np.pi
-    quadrant_location_phases = [0, -atan_1_2, atan_1_2, 0]
+    quadrant_location_phases = [0, -0.125, 0.125, 0]
 
     quiet = 0.25
     loud = 0.75
@@ -69,7 +68,7 @@ def main():
     symbols = bytes_to_symbols(filedata)
 
     name = 'Loopback: PCM (hw:2,0)'
-    # name = 'HDMI: 3 (hw:0'
+    name = 'HDMI: 3 (hw:0'
 
     stream = sd.OutputStream(samplerate=sample_rate, device=name, channels=2, dtype='int32')
     # stream = sd.OutputStream(samplerate=sample_rate, device=sd.default.device, channels=2, dtype='int32')
@@ -100,7 +99,7 @@ if __name__ == '__main__':
 
     sample_rate = 48000
 
-    symbol_length_samples = 50
+    symbol_length_samples = 20
     cycles_per_symbol = 1
 
     main()

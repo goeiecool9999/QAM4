@@ -1,4 +1,4 @@
-from math import atan
+import math
 
 import matplotlib.pyplot as plt
 from matplotlib import cm
@@ -15,7 +15,7 @@ def fft_symbols_error_feedback(signal):
     :param signal: The signal to be processed
     :return: numpy array of decoded symbols
     """
-    symbol_chunk_size = 150
+    symbol_chunk_size = 32
 
     symbols = []
     chunk_start = 0
@@ -25,9 +25,19 @@ def fft_symbols_error_feedback(signal):
         angles, error = fft_symbols(signal[chunk_start: chunk_end], True)
         symbols.append(angles)
 
-        # 0.5 error for a symbol means 90 degrees phase shift
-        # 90 degrees shift = 0.25*symbol_length_samples
-        correction = int(np.sum(error) / symbol_chunk_size * 0.25 * symbol_length_samples)
+        positive_worst = np.sort(error[error > 0])
+        negative_worst = np.sort(np.abs(error[error < 0]))
+
+        if len(positive_worst) > len(negative_worst):
+            sub_sample_error = np.average(positive_worst[-6:-2])
+        else:
+            sub_sample_error = -np.average(negative_worst[-6:-2])
+
+        correction = 0
+
+        if not math.isnan(sub_sample_error):
+            # Error of 1 would be 180 degrees; symbol_length_samples / 2
+            correction = round(sub_sample_error * 0.5 * symbol_length_samples)
 
         chunk_start = chunk_end + correction
         chunk_end = chunk_start + symbol_chunk_size * symbol_length_samples
@@ -50,7 +60,7 @@ def indices_of_y_in_x(x, y):
     sorted_x = x[index]
     sorted_index = np.searchsorted(sorted_x, y)
 
-    return np.take(index, sorted_index, mode="clip")
+    return np.take(index, sorted_index, mode="clip").astype('byte')
 
 
 def fft_symbols(signal, get_err=False, plot=0):
@@ -76,8 +86,15 @@ def fft_symbols(signal, get_err=False, plot=0):
     amps = np.where(amps < noise_floor * snr_factor, amps * 0, amps)
     # normalize samples to loudest.
     max_amp = np.amax(amps)
+
+    if max_amp == 0:
+        if get_err:
+            return np.zeros(len(signal_sections)).astype('byte'), np.zeros(len(signal_sections))
+        else:
+            return np.zeros(len(signal_sections)).astype('byte')
+
     amps = amps / max_amp
-    amps = amps > (quiet / loud)
+    amps = amps > (((quiet / loud) + loud) / 2)
 
     angles = np.arctan2(values.imag, values.real) / np.pi % 2
 
@@ -91,10 +108,11 @@ def fft_symbols(signal, get_err=False, plot=0):
     lookup_lists = np.array([[0, 3], [1, 1], [2, 2]])
 
     phase_rounder = rounder(np.array(quadrant_location_phases))
-    round_phases = phase_rounder(angles - round_quadrants).astype('float32')
+    normalized_angles = angles - round_quadrants
+    round_phases = phase_rounder(normalized_angles).astype('float32')
     phase_indices = indices_of_y_in_x(x=np.array(quadrant_location_phases), y=round_phases)
 
-    out |= np.where(amps, lookup_lists[phase_indices][:, 0], lookup_lists[phase_indices][:, 1])
+    out |= np.where(amps, lookup_lists[phase_indices][:, 1], lookup_lists[phase_indices][:, 0])
 
     if plot:
         fig, axs = plt.subplots(2, 1, gridspec_kw={'height_ratios': [1, 8]}, figsize=(8, 8))
@@ -103,32 +121,27 @@ def fft_symbols(signal, get_err=False, plot=0):
         axs[0].set_ylim(-1, 1)
 
         plot_values = values[:16]
-        plot_out = round_phases[:16]
-
         axs[1].scatter(plot_values.real, plot_values.imag
                        , c=np.linspace(0, 1, len(plot_values))
                        , cmap=cm.rainbow)
-        axs[1].scatter(np.cos(plot_out * np.pi) * .8, np.sin(plot_out * np.pi) * .8
-                       , c=np.linspace(0, 1, len(plot_out))
-                       , cmap=cm.rainbow)
+
+        error = round_phases - normalized_angles
+        axs[1].set_title(np.average(error) / 2 * symbol_length_samples)
+        axs[1].plot(error)
+
         axs[1].set_xlim(-1, 1)
         axs[1].set_ylim(-1, 1)
 
-        fig.savefig(f'images/{plot}')
-        plt.clf()
-        # plt.show()
+        # fig.savefig(f'images/{plot}')
+        # plt.clf()
+        plt.show()
         plt.close(fig)
 
     # rounded angle calculations becoming symbol values
     # out = np.mod(np.round((np.arctan2(values.imag, values.real) + np.pi) / np.pi * 2 - 2), 4).astype('byte')
 
     if get_err:
-        # unrounded angle calculations to get error
-        raw = np.mod((np.arctan2(values.imag, values.real) + np.pi) / np.pi * 2 - 2, 4)
-
-        # calculate error
-        error = out - raw
-        error = np.where(error < -3, 4 + error, error)
+        error = round_phases - normalized_angles
         return out, error
     else:
         return out
@@ -154,7 +167,7 @@ def stream_read_left_float32(stream, amount):
 
 
 def determine_snr(stream):
-    return 0
+    # return 0
     # record four seconds for noise and drop first two.
     noise_measurement = stream_read_left_float32(stream, sample_rate * 4)
     noise_measurement = noise_measurement[sample_rate * 2:]
@@ -169,12 +182,10 @@ def symbols_to_bytes(symbols):
     :param symbols: list of symbols
     :return: numpy array of bytes
     """
-    out = np.empty(len(symbols) // 4, dtype='byte')
+    out = np.empty(len(symbols) // 2, dtype='byte')
     for i in range(len(out)):
-        out[i] = symbols[i * 4 + 0] << 6
-        out[i] |= symbols[i * 4 + 1] << 4
-        out[i] |= symbols[i * 4 + 2] << 2
-        out[i] |= symbols[i * 4 + 3] << 0
+        out[i] = symbols[i * 2 + 0] << 4
+        out[i] |= symbols[i * 2 + 1]
     return out.tobytes()
 
 
@@ -226,7 +237,7 @@ def main():
         # Some sound cards invert the signal which trips up the preamble detection logic.
         # Comment or uncomment when appropriate
         # TODO: Automatically detect inverted signal
-        # data = -data
+        data = -data
 
         # Detect leading constant wave that precedes the preamble pattern.
         # Naive fft which is good enough to catch a bunch of unchanging phases.
@@ -240,9 +251,9 @@ def main():
 
         # Consider only stretches of more than 15 unchanged phases.
         skip_candidates = (change_lens > 10).nonzero()[0]
-        # if not len(skip_candidates):
-        #     print("listening for next sound because no preamble found")
-        #     continue
+        if not len(skip_candidates):
+            print("listening for next sound because no preamble found")
+            continue
 
         start_sample = 0
 
@@ -269,8 +280,8 @@ def main():
         # Find the actual preamble pattern to recognise.
         preamble_start = 0
         missing_preamble = True
-        for i in range(preamble_num_samples * 150):
-            angles, error = fft_symbols(data[i:i + preamble_num_samples * 2], True, i + 1)
+        for i in range(preamble_num_samples * 8):
+            angles = fft_symbols(data[i:i + preamble_num_samples * 2], False)
             # TODO: Find a better way to test for non string sequences
             # converts the decoded symbols and preamble to strings and checks
             # if the string of the preamble is in the string of the decoded symbols
@@ -282,15 +293,25 @@ def main():
         if missing_preamble:
             print('failed to find preamble in sound')
             continue
+        plt.figure(figsize=(20, 8))
+        plt.plot(data[max(preamble_start - symbol_length_samples * 2, 0):preamble_start + symbol_length_samples * 2])
+        plt.title('first detection preamble')
+        if preamble_start - symbol_length_samples * 2 < 0:
+            plt.axvline(preamble_start)
+        else:
+            plt.axvline(symbol_length_samples * 2)
+        plt.show()
 
         # At this point it's likely that the preamble was detected even though
         # the fourier analysis window is not aligned to the symbols perfectly
         # scan forwards slowly until we find a minimum in the summed error values
 
-        error = np.sum(np.abs(error))
+        alignment_search_start = preamble_start
+        sym, error = fft_symbols(data[alignment_search_start:alignment_search_start + preamble_num_samples], True)
+        error = np.sum(error)
         last_error = error
-        extra_offset = 0
-        while last_error >= error:
+        extra_offset = 1
+        while last_error > error:
             last_error = error
             alignment_search_start = preamble_start + extra_offset
             search_angles, error = fft_symbols(
@@ -300,6 +321,15 @@ def main():
 
         # Add the found offset excluding the one that increased error
         preamble_start += extra_offset - 1
+
+        plt.figure(figsize=(20, 8))
+        plt.plot(data[max(preamble_start - symbol_length_samples * 2, 0):preamble_start + symbol_length_samples * 2])
+        plt.title('correction preamble')
+        if preamble_start - symbol_length_samples * 2 < 0:
+            plt.axvline(preamble_start)
+        else:
+            plt.axvline(symbol_length_samples * 2)
+        plt.show()
 
         data_start = preamble_start + preamble_num_samples
 
@@ -325,8 +355,7 @@ if __name__ == '__main__':
     # Base phase of each quadrant
     quadrant_base_phases = [0.25, 1.75, 0.75, 1.25]
     # phase offset for each position in quadrant
-    atan_1_2 = atan(1 / 2) / np.pi
-    quadrant_location_phases = [0, -atan_1_2, atan_1_2, 0]
+    quadrant_location_phases = [0, -0.125, 0.125, 0]
 
     quiet = 0.25
     loud = 0.75
@@ -341,7 +370,7 @@ if __name__ == '__main__':
 
     symbol_wave_parameters = np.array(symbol_wave_parameters)
 
-    symbol_length_samples = 50
+    symbol_length_samples = 20
     cycles_per_symbol = 1
 
     sample_rate = 48000
