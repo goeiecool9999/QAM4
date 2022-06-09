@@ -23,12 +23,16 @@ def fft_symbols_error_feedback(signal):
 
     graph = 1
     while chunk_end < len(signal):
-        angles, error = fft_symbols(signal[chunk_start: chunk_end], True, graph)
+        angles, error = fft_symbols(signal[chunk_start: chunk_end], True)
         graph += 1
         symbols.append(angles)
 
-        positive_worst = np.sort(error[error > 0])[-6:-2]
-        negative_worst = np.sort(np.abs(error[error < 0]))[-6:-2]
+        positive_worst = np.sort(error[error > 0])
+        negative_worst = np.sort(np.abs(error[error < 0]))
+
+        # center slice
+        positive_worst = positive_worst[positive_worst.size // 3: positive_worst.size // 3 * 2]
+        negative_worst = negative_worst[negative_worst.size // 3: negative_worst.size // 3 * 2]
 
         if not positive_worst.size and not negative_worst.size:
             sub_sample_error = 0
@@ -128,9 +132,8 @@ def fft_symbols(signal, get_err=False, plot=0):
 
         error = round_phases - normalized_angles
 
-
-        positive_worst = np.sort(error[error > 0])[-6:-2]
-        negative_worst = np.sort(np.abs(error[error < 0]))[-6:-2]
+        positive_worst = np.sort(error[error > 0])[-16:-8]
+        negative_worst = np.sort(np.abs(error[error < 0]))[-16:-8]
 
         if not positive_worst.size and not negative_worst.size:
             sub_sample_error = 0
@@ -141,7 +144,6 @@ def fft_symbols(signal, get_err=False, plot=0):
 
         # Error of 1 would be 180 degrees; symbol_length_samples / 2
         correction = round(sub_sample_error * 0.5 * symbol_length_samples)
-
 
         axs[1].set_title(correction)
 
@@ -209,8 +211,8 @@ def main():
     global noise_floor
     name = 'Loopback: PCM (hw:2,1)'
 
-    # stream = sd.InputStream(device=sd.default.device, samplerate=sample_rate, channels=2, dtype='int32')
-    stream = sd.InputStream(device=name, samplerate=sample_rate, channels=2, dtype='int32')
+    stream = sd.InputStream(device=sd.default.device, samplerate=sample_rate, channels=2, dtype='int32')
+    # stream = sd.InputStream(device=name, samplerate=sample_rate, channels=2, dtype='int32')
     stream.start()
 
     print('discovering noise floor')
