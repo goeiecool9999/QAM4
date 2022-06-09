@@ -68,7 +68,7 @@ def main():
     symbols = bytes_to_symbols(filedata)
 
     name = 'Loopback: PCM (hw:2,0)'
-    name = 'HDMI: 3 (hw:0'
+    # name = 'HDMI: 3 (hw:0'
 
     stream = sd.OutputStream(samplerate=sample_rate, device=name, channels=2, dtype='int32')
     # stream = sd.OutputStream(samplerate=sample_rate, device=sd.default.device, channels=2, dtype='int32')
@@ -79,11 +79,17 @@ def main():
     # send preamble
     # for i in [x for x in range(16)] * 50 + preamble:
     for i in [3] * 50 + preamble:
-        stream.write(symbol_signals[i])
+        underflowed = stream.write(symbol_signals[i])
+        if underflowed:
+            print("YOU DONKEY")
+            exit(1)
 
     # send data
     for i in symbols:
-        stream.write(symbol_signals[i])
+        underflowed = stream.write(symbol_signals[i])
+        if underflowed:
+            print("YOU DONKEY")
+            exit(1)
 
     # exit
     sleep(1)

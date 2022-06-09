@@ -21,23 +21,24 @@ def fft_symbols_error_feedback(signal):
     chunk_start = 0
     chunk_end = symbol_chunk_size * symbol_length_samples
 
+    graph = 1
     while chunk_end < len(signal):
-        angles, error = fft_symbols(signal[chunk_start: chunk_end], True)
+        angles, error = fft_symbols(signal[chunk_start: chunk_end], True, graph)
+        graph += 1
         symbols.append(angles)
 
-        positive_worst = np.sort(error[error > 0])
-        negative_worst = np.sort(np.abs(error[error < 0]))
+        positive_worst = np.sort(error[error > 0])[-6:-2]
+        negative_worst = np.sort(np.abs(error[error < 0]))[-6:-2]
 
-        if len(positive_worst) > len(negative_worst):
-            sub_sample_error = np.average(positive_worst[-6:-2])
+        if not positive_worst.size and not negative_worst.size:
+            sub_sample_error = 0
+        elif len(positive_worst) > len(negative_worst):
+            sub_sample_error = np.average(positive_worst)
         else:
-            sub_sample_error = -np.average(negative_worst[-6:-2])
+            sub_sample_error = -np.average(negative_worst)
 
-        correction = 0
-
-        if not math.isnan(sub_sample_error):
-            # Error of 1 would be 180 degrees; symbol_length_samples / 2
-            correction = round(sub_sample_error * 0.5 * symbol_length_samples)
+        # Error of 1 would be 180 degrees; symbol_length_samples / 2
+        correction = round(sub_sample_error * 0.5 * symbol_length_samples)
 
         chunk_start = chunk_end + correction
         chunk_end = chunk_start + symbol_chunk_size * symbol_length_samples
@@ -126,15 +127,30 @@ def fft_symbols(signal, get_err=False, plot=0):
                        , cmap=cm.rainbow)
 
         error = round_phases - normalized_angles
-        axs[1].set_title(np.average(error) / 2 * symbol_length_samples)
-        axs[1].plot(error)
+
+
+        positive_worst = np.sort(error[error > 0])[-6:-2]
+        negative_worst = np.sort(np.abs(error[error < 0]))[-6:-2]
+
+        if not positive_worst.size and not negative_worst.size:
+            sub_sample_error = 0
+        elif len(positive_worst) > len(negative_worst):
+            sub_sample_error = np.average(positive_worst)
+        else:
+            sub_sample_error = -np.average(negative_worst)
+
+        # Error of 1 would be 180 degrees; symbol_length_samples / 2
+        correction = round(sub_sample_error * 0.5 * symbol_length_samples)
+
+
+        axs[1].set_title(correction)
 
         axs[1].set_xlim(-1, 1)
         axs[1].set_ylim(-1, 1)
 
-        # fig.savefig(f'images/{plot}')
-        # plt.clf()
-        plt.show()
+        fig.savefig(f'images/{plot}')
+        plt.clf()
+        # plt.show()
         plt.close(fig)
 
     # rounded angle calculations becoming symbol values
@@ -308,7 +324,7 @@ def main():
 
         alignment_search_start = preamble_start
         sym, error = fft_symbols(data[alignment_search_start:alignment_search_start + preamble_num_samples], True)
-        error = np.sum(error)
+        error = np.sum(np.abs(error))
         last_error = error
         extra_offset = 1
         while last_error > error:
