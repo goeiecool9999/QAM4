@@ -25,10 +25,17 @@ def main():
     # upper 2 bits determine quadrant of constellation
     # lower 2 bits determine position within quadrant
 
+    phase_division = 2 / 12
+
+    # [11 0 1]
+    # [2 3 4]
+    # [5 6 7]
+    # [8 9 10]
+
     # Base phase of each quadrant
-    quadrant_base_phases = [0.25, 1.75, 0.75, 1.25]
+    quadrant_base_phases = [0, phase_division * 9, phase_division * 3, phase_division * 6]
     # phase offset for each position in quadrant
-    quadrant_location_phases = [0, -0.125, 0.125, 0]
+    quadrant_location_phases = [0, -phase_division, phase_division, 0]
 
     quiet = 0.25
     loud = 0.75
@@ -41,7 +48,6 @@ def main():
             symbol_wave_parameters.append((quadrant_base_phases[quadrant] + quadrant_location_phases[lower_bits],
                                            quadrant_location_amplitudes[lower_bits]))
 
-
     # sample date for each shifted wave
     symbol_signals = []
     for phase, amp in symbol_wave_parameters:
@@ -50,8 +56,8 @@ def main():
 
     # fig, axs = plt.subplots(4, 4)
     # for i, v in enumerate(symbol_signals):
-    #     axs[i//4,i%4].set_title(f'{i}')
-    #     axs[i//4,i%4].plot(v)
+    #     axs[i // 4, i % 4].set_title(f'{i}')
+    #     axs[i // 4, i % 4].plot(v)
     #
     # plt.show()
     # plt.close(fig)
@@ -70,14 +76,14 @@ def main():
     name = 'Loopback: PCM (hw:2,0)'
     name = 'HDMI: 3 (hw:0'
 
-    stream = sd.OutputStream(samplerate=sample_rate, device=name, channels=2, dtype='int32')
-    # stream = sd.OutputStream(samplerate=sample_rate, device=sd.default.device, channels=2, dtype='int32')
+    # stream = sd.OutputStream(samplerate=sample_rate, device=name, channels=2, dtype='int32')
+    stream = sd.OutputStream(samplerate=sample_rate, device=sd.default.device, channels=2, dtype='int32')
 
     # start playing the signal
     stream.start()
 
     # send preamble
-    # for i in [x for x in range(16)] * 50 + preamble:
+    # for i in [15-x for x in range(16)] * 50 + preamble:
     for i in [3] * 50 + preamble:
         underflowed = stream.write(symbol_signals[i])
         if underflowed:
@@ -103,9 +109,9 @@ if __name__ == '__main__':
 
     preamble = [5, 9, 13, 12, 7, 2, 3, 14, 1, 8, 6, 4, 10, 11, 15, 0]
 
-    sample_rate = 48000
+    sample_rate = 192000
 
-    symbol_length_samples = 20
+    symbol_length_samples = 16
     cycles_per_symbol = 1
 
     main()

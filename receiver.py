@@ -102,6 +102,7 @@ def fft_symbols(signal, get_err=False, plot=0):
     amps = amps > (((quiet / loud) + loud) / 2)
 
     angles = np.arctan2(values.imag, values.real) / np.pi % 2
+    angles = np.where(angles > phase_division*10.5, -2+angles, angles)
 
     # find upper two bits by identifying nearest quadrant base phase
     quadrant_rounder = rounder(np.array(quadrant_base_phases))
@@ -150,9 +151,9 @@ def fft_symbols(signal, get_err=False, plot=0):
         axs[1].set_xlim(-1, 1)
         axs[1].set_ylim(-1, 1)
 
-        fig.savefig(f'images/{plot}')
-        plt.clf()
-        # plt.show()
+        # fig.savefig(f'images/{plot}')
+        # plt.clf()
+        plt.show()
         plt.close(fig)
 
     # rounded angle calculations becoming symbol values
@@ -255,7 +256,7 @@ def main():
         # Some sound cards invert the signal which trips up the preamble detection logic.
         # Comment or uncomment when appropriate
         # TODO: Automatically detect inverted signal
-        data = -data
+        # data = -data
 
         # Detect leading constant wave that precedes the preamble pattern.
         # Naive fft which is good enough to catch a bunch of unchanging phases.
@@ -370,10 +371,17 @@ if __name__ == '__main__':
     # upper 2 bits determine quadrant of constellation
     # lower 2 bits determine position within quadrant
 
+    phase_division = 2 / 12
+
+    # [11 0 1]
+    # [2 3 4]
+    # [5 6 7]
+    # [8 9 10]
+
     # Base phase of each quadrant
-    quadrant_base_phases = [0.25, 1.75, 0.75, 1.25]
+    quadrant_base_phases = [0, phase_division * 9, phase_division * 3, phase_division * 6]
     # phase offset for each position in quadrant
-    quadrant_location_phases = [0, -0.125, 0.125, 0]
+    quadrant_location_phases = [0, -phase_division, phase_division, 0]
 
     quiet = 0.25
     loud = 0.75
@@ -388,10 +396,10 @@ if __name__ == '__main__':
 
     symbol_wave_parameters = np.array(symbol_wave_parameters)
 
-    symbol_length_samples = 20
+    symbol_length_samples = 16
     cycles_per_symbol = 1
 
-    sample_rate = 48000
+    sample_rate = 192000
 
     preamble = [5, 9, 13, 12, 7, 2, 3, 14, 1, 8, 6, 4, 10, 11, 15, 0]
     preamble_num_samples = symbol_length_samples * len(preamble)
